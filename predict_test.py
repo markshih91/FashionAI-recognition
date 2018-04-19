@@ -20,23 +20,36 @@ config = tf.ConfigProto()
 config.gpu_options.per_process_gpu_memory_fraction = 0.8
 session = tf.Session(config=config)
 
-DATA = "0401"
+DATA = "0408"
 WIDTH = 299
 TRAIN_DIR = "/home/shuai_shi/Documents/FashionAI-data/train/"
 TEST_DIR = "/home/shuai_shi/Documents/FashionAI-data/test/"
 RESULT_DIR = "/home/shuai_shi/Documents/FashionAI-data/result/"
 MODELS_DIR = "/home/shuai_shi/Documents/FashionAI-data/model/"
-BATCH_SIZE = 16
-EPOCHS = 80
-CLASSES = ['neck_design_labels', 'collar_design_labels', 'neckline_design_labels', 'skirt_length_labels',
-           'sleeve_length_labels', 'coat_length_labels', 'lapel_design_labels',
-           'pant_length_labels']
+CLASSES = ['neck_design_labels', 'collar_design_labels', 'skirt_length_labels', 'pant_length_labels',
+           'lapel_design_labels', 'coat_length_labels', 'sleeve_length_labels',
+           'neckline_design_labels']
+
+
+
+def rotate(image, angle, center=None, scale=1.0):
+    (h, w) = image.shape[:2]
+    if center is None:
+        center = (w / 2, h / 2)
+    M = cv2.getRotationMatrix2D(center, angle, scale)
+    rotated = cv2.warpAffine(image, M, (w, h))
+    return rotated
+
+def con_bright(img, a, g):
+    h, w, ch = img.shape
+    img2 = np.zeros([h, w, ch], img.dtype)
+    return cv2.addWeighted(img, a, img2, 1 - a, g)
 
 
 df_train = pd.read_csv(TRAIN_DIR + 'label.csv', header=None)
 df_train.columns = ['image_id', 'class', 'label']
 
-for iii in range(7, 8):
+for iii in range(6, 7):
     cur_class = CLASSES[iii]
     df_load = df_train[(df_train['class'] == cur_class)].copy()
     df_load.reset_index(inplace=True)
@@ -80,16 +93,37 @@ for iii in range(7, 8):
 
     n = len(df_load)
     X_test = np.zeros((n, WIDTH, WIDTH, 3), dtype=np.uint8)
+    X_test_flip = np.zeros((n, WIDTH, WIDTH, 3), dtype=np.uint8)
+    X_test_rotate = np.zeros((n, WIDTH, WIDTH, 3), dtype=np.uint8)
+    X_test_con_bright = np.zeros((n, WIDTH, WIDTH, 3), dtype=np.uint8)
 
     for i in tqdm(range(n)):
-        X_test[i] = cv2.resize(cv2.imread(TEST_DIR + '{0}'.format(df_load['image_id'][i])), (WIDTH, WIDTH))
+        img = cv2.resize(cv2.imread(TEST_DIR + '{0}'.format(df_load['image_id'][i])), (WIDTH, WIDTH))
+        X_test[i] = img
+        X_test_flip[i] = cv2.flip(img, 1)
+
+        if i % 2 == 0:
+            angle = np.random.randint(5, 20)
+            a = np.random.randint(12, 16) / 10
+            g = np.random.randint(-100, -29)
+        else:
+            angle = np.random.randint(5, 20) * -1
+            a = np.random.randint(5, 9) / 10
+            g = np.random.randint(29, 101)
+
+        X_test_rotate[i] = rotate(img, angle)
+        X_test_con_bright[i] = con_bright(img, a, g)
 
     test_np = model.predict(X_test, batch_size = 256)
+    test_np_flip = model.predict(X_test_flip, batch_size=256)
+    test_np_rotate = model.predict(X_test_rotate, batch_size=256)
+    X_test_con_bright = model.predict(X_test_rotate, batch_size=256)
 
     result = []
 
     for i, row in df_load.iterrows():
-        tmp_list = test_np[i]
+        tmp_list = test_np[i] + test_np_flip[i] + test_np_rotate[i] + X_test_con_bright[i]
+        tmp_list /= 4
         tmp_result = ''
         for tmp_ret in tmp_list:
             tmp_result += '{:.4f};'.format(tmp_ret)

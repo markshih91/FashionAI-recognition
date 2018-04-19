@@ -7,15 +7,18 @@ import pandas as pd
 TRAIN_DIR = "/home/shuai_shi/Documents/FashionAI-data/train/"
 BATCH_SIZE = 16
 EPOCHS = 80
-CLASS_COUNT = 8000
-CLASSES = ['neck_design_labels', 'collar_design_labels', 'neckline_design_labels', 'skirt_length_labels',
-           'sleeve_length_labels', 'coat_length_labels', 'lapel_design_labels',
-           'pant_length_labels']
+CLASS_COUNT_0_5 = 8000
+CLASS_COUNT_5_8 = 5000
+CLASSES = ['neck_design_labels', 'collar_design_labels', 'skirt_length_labels', 'pant_length_labels',
+           'lapel_design_labels', 'coat_length_labels', 'sleeve_length_labels',
+           'neckline_design_labels']
 
 df_train = pd.read_csv(TRAIN_DIR + 'label.csv', header=None)
 df_train.columns = ['image_id', 'class', 'label']
 
-for i in range(1, 8):
+label_file = open((TRAIN_DIR + "new_label.csv"), 'w')
+
+for i in range(0, 8):
 
     cur_class = CLASSES[i]
     df_load = df_train[(df_train['class'] == cur_class)].copy()
@@ -56,4 +59,22 @@ for i in range(1, 8):
         p = Augmentor.Pipeline(path)
         p.flip_left_right(probability = 0.5)
         p.rotate(probability = 0.7, max_left_rotation = 10, max_right_rotation = 10)
-        p.sample(CLASS_COUNT)
+        if i < 5:
+            sample_count = CLASS_COUNT_0_5
+        else:
+            sample_count = CLASS_COUNT_5_8
+        p.sample(sample_count)
+
+    for j in tqdm(range(m)):
+        path = TRAIN_DIR + 'new_Images/' + cur_class + "/" + tmp_labels_set[j] + "/output"
+        files = os.listdir(path)
+        sub_path = 'new_Images/' + cur_class + "/" + tmp_labels_set[j] + "/output/"
+        for file_name in files:
+            line = sub_path + file_name + "," + cur_class + "," + tmp_labels_set[j]
+            label_file.write(line + "\n")
+
+label_file.close()
+
+
+
+
